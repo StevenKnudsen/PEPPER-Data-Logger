@@ -1,3 +1,9 @@
+Debug
+Debug/*
+
+*.ld
+*.launch
+
 # Prerequisites
 *.d
 
