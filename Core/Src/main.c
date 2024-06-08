@@ -106,7 +106,6 @@ int main(void)
 	MX_FATFS_Init();
 	MX_SPI3_Init();
 	/* USER CODE BEGIN 2 */
-	//  printf("\r\n~ SD card demo ~\r\n\r\n");
 	//  myprintf("\r\n~ SD card demo ~\r\n\r\n");
 	HAL_Delay(500);
 
@@ -114,70 +113,102 @@ int main(void)
 	FIL fil;
 	FRESULT fres;
 
+	uint32_t start_ms, diff_ms;
+	char filename[15];
+
+	enum SD_CARD_TEST {
+		WRITE_10MB_FILE,
+		CREATE_500_FILES,
+		CREATE_100_1MB_FILES
+	};
+
+	enum SD_CARD_TEST theTest = WRITE_10MB_FILE;
+
 	fres = f_mount(&FatFs, "", 1);
 	if (fres != FR_OK) {
 		//    myprintf("f_mount error (%i) \r\n", fres);
-		while (fres != FR_OK) {
-			HAL_Delay(500);
-			fres = f_mount(&FatFs, "", 1);
+		while (1);
+	}
 
+	switch (theTest) {
+	case WRITE_10MB_FILE:
+		uint32_t byteCount = 0;
+		// Create test file on SD card
+		fres = f_open(&fil, "ten_megabyte_file.bin", FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
+		if (fres == FR_OK) {
+			//			uint32_t faux_sample1 = 0xDEADBEEF;
+			//			uint32_t faux_sample2 = 0xCAFEBABE;
+
+			uint32_t bufferKB = 48;
+			uint32_t numBytes = bufferKB*220*1024;
+			// There is 64 kB of RAM to work with. Use 48 kB
+			uint32_t numSamples = bufferKB*1024/4;
+			uint32_t samples[numSamples];
+			for (uint16_t j=0; j< numSamples; j+=2) {
+				samples[j] = 0xDEADBEEF;
+				samples[j+1] = 0xCAFEBABE;
+			}
+
+			start_ms = HAL_GetTick();
+
+			// Test time to write ~10 MB
+			uint32_t numIter = numBytes / (bufferKB*1024);
+			for (uint16_t i = 0; i < numIter; i++) {
+				fres = f_write(&fil, samples, numSamples*4, &bytesSaved);
+				byteCount += numSamples*4;
+				if (fres != FR_OK) {
+					// Should really do something here, but can't use printf. Blink an LED?
+				}
+			}
+			diff_ms = HAL_GetTick() - start_ms;
 		}
+
+		// Close file
+		f_close(&fil);
+		break;
+	case CREATE_500_FILES:
+		// Test time to open new file and close new file
+
+		start_ms = HAL_GetTick();
+
+		for (int i = 0; i < 500; i++) {
+			sprintf(filename,"file_%d.bin",i);
+			fres = f_open(&fil, filename, FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
+			if (fres != FR_OK) {
+				// Should really do something here, but can't use printf. Blink an LED?
+			}
+			// Close file
+			f_close(&fil);
+		}
+		diff_ms = HAL_GetTick() - start_ms;
+		break;
+	case CREATE_100_1MB_FILES:
+
+		start_ms = HAL_GetTick();
+
+		for (int i = 0; i < 100; i++) {
+			sprintf(filename,"1MB_%d.bin",i);
+			fres = f_open(&fil, filename, FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
+			if (fres == FR_OK) {
+				uint32_t faux_sample1 = 0xF00D4FEE;
+				uint32_t faux_sample2 = 0xBEC0FFEE;
+				UINT bytesSaved;
+				for (uint32_t i = 0; i < 1024*1024/8; i++) {
+					fres = f_write(&fil, &faux_sample1, 4, &bytesSaved);
+					fres = f_write(&fil, &faux_sample2, 4, &bytesSaved);
+					if (fres != FR_OK) {
+						// Should really do something here, but can't use printf. Blink an LED?
+					}
+				}
+			}
+			// Close file
+			f_close(&fil);
+		}
+		diff_ms = HAL_GetTick() - start_ms;
+		break;
+	default :
+		break;
 	}
-
-	DWORD free_clusters, free_sectors, total_sectors;
-
-	FATFS* getFreeFs;
-
-	fres = f_getfree("", &free_clusters, &getFreeFs);
-	if (fres != FR_OK) {
-		//    myprintf("f_getfree error (%i) \r\n", fres);
-		while (1);
-	}
-
-	total_sectors = (getFreeFs->n_fatent - 2) * getFreeFs->csize;
-	free_sectors = free_clusters * getFreeFs->csize;
-
-	fres = f_open(&fil, "test.txt", FA_READ);
-	if (fres != FR_OK) {
-		//    myprintf("f_getfree error (%i) \r\n", fres);
-		while (1);
-	}
-
-	//Read 30 bytes from "test.txt" on the SD card
-	BYTE readBuf[30];
-
-	//We can either use f_read OR f_gets to get data out of files
-	//f_gets is a wrapper on f_read that does some string formatting for us
-	TCHAR* rres = f_gets((TCHAR*)readBuf, 30, &fil);
-	if(rres != 0) {
-		// 	myprintf("Read string from 'test.txt' contents: %s\r\n", readBuf);
-	} else {
-		// 	myprintf("f_gets error (%i)\r\n", fres);
-	}
-
-	// Close file
-	f_close(&fil);
-
-	// Write a file "write.txt"
-	fres = f_open(&fil, "write.txt", FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
-	if(fres == FR_OK) {
-//		myprintf("I was able to open 'write.txt' for writing\r\n");
-	} else {
-//		myprintf("f_open error (%i)\r\n", fres);
-	}
-
-	//Copy in a string
-	strncpy((char*)readBuf, "a new file is made!", 20);
-	UINT bytesWrote;
-	fres = f_write(&fil, readBuf, 19, &bytesWrote);
-	if(fres == FR_OK) {
-//		myprintf("Wrote %i bytes to 'write.txt'!\r\n", bytesWrote);
-	} else {
-//		myprintf("f_write error (%i)\r\n");
-	}
-
-	// Close file
-	f_close(&fil);
 
 	// unmount the drive
 	f_mount(NULL, "", 0);
@@ -317,7 +348,7 @@ static void MX_SPI3_Init(void)
 	hspi3.Instance = SPI3;
 	hspi3.Init.Mode = SPI_MODE_SLAVE;
 	hspi3.Init.Direction = SPI_DIRECTION_2LINES_RXONLY;
-	hspi3.Init.DataSize = SPI_DATASIZE_4BIT;
+	hspi3.Init.DataSize = SPI_DATASIZE_8BIT;
 	hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
 	hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
 	hspi3.Init.NSS = SPI_NSS_SOFT;
