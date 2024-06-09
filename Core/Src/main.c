@@ -106,15 +106,18 @@ int main(void)
 	MX_FATFS_Init();
 	MX_SPI3_Init();
 	/* USER CODE BEGIN 2 */
-	//  myprintf("\r\n~ SD card demo ~\r\n\r\n");
 	HAL_Delay(500);
 
 	FATFS FatFs;
 	FIL fil;
 	FRESULT fres;
+	FILINFO finfo;
 
 	uint32_t start_ms, diff_ms;
+
 	char filename[15];
+
+	UINT bytesSaved;
 
 	enum SD_CARD_TEST {
 		WRITE_10MB_FILE,
@@ -122,7 +125,7 @@ int main(void)
 		CREATE_100_1MB_FILES
 	};
 
-	enum SD_CARD_TEST theTest = WRITE_10MB_FILE;
+	enum SD_CARD_TEST theTest = CREATE_500_FILES;
 
 	fres = f_mount(&FatFs, "", 1);
 	if (fres != FR_OK) {
@@ -167,8 +170,37 @@ int main(void)
 		f_close(&fil);
 		break;
 	case CREATE_500_FILES:
-		// Test time to open new file and close new file
+		// Test time to open and close a new file that doesn't already exist
 
+		// First check for files from a previous test and if they exist, delete.
+		start_ms = HAL_GetTick();
+
+		for (int i = 0; i < 5; i++) {
+			sprintf(filename,"file_%d.bin",i);
+			fres = f_stat(filename, &finfo);
+			switch (fres) {
+
+			case FR_OK:
+				// Delete the file
+				f_unlink(filename);
+				break;
+
+			case FR_NO_FILE:
+				break;
+			case FR_NO_PATH:
+				// Should really do something here, but can't use printf. Blink an LED?
+				break;
+
+			default:
+				// Should really do something here, but can't use printf. Blink an LED?
+				break;
+			}
+		}
+
+		diff_ms = HAL_GetTick() - start_ms;
+
+		// Now create the files. It's assumed they don't exist (the card has been
+		// freshly formatted)
 		start_ms = HAL_GetTick();
 
 		for (int i = 0; i < 500; i++) {
@@ -181,6 +213,21 @@ int main(void)
 			f_close(&fil);
 		}
 		diff_ms = HAL_GetTick() - start_ms;
+
+		// Create the files again to see if it's faster when they already exists
+		start_ms = HAL_GetTick();
+
+		for (int i = 0; i < 500; i++) {
+			sprintf(filename,"file_%d.bin",i);
+			fres = f_open(&fil, filename, FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
+			if (fres != FR_OK) {
+				// Should really do something here, but can't use printf. Blink an LED?
+			}
+			// Close file
+			f_close(&fil);
+		}
+		diff_ms = HAL_GetTick() - start_ms;
+
 		break;
 	case CREATE_100_1MB_FILES:
 
@@ -219,8 +266,6 @@ int main(void)
 	/* USER CODE BEGIN WHILE */
 	while (1)
 	{
-		//	  printf("\r\n~ SD card demo ~\r\n\r\n");
-		//	  myprintf("\r\n~ SD card demo ~\r\n\r\n");
 		HAL_Delay(500);
 		/* USER CODE END WHILE */
 
