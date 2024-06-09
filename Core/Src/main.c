@@ -125,7 +125,7 @@ int main(void)
 		CREATE_100_1MB_FILES
 	};
 
-	enum SD_CARD_TEST theTest = CREATE_500_FILES;
+	enum SD_CARD_TEST theTest = CREATE_100_1MB_FILES;
 
 	fres = f_mount(&FatFs, "", 1);
 	if (fres != FR_OK) {
@@ -230,28 +230,50 @@ int main(void)
 
 		break;
 	case CREATE_100_1MB_FILES:
-
+	{
 		start_ms = HAL_GetTick();
 
-		for (int i = 0; i < 100; i++) {
+		uint32_t bufferKB = 48;
+		uint32_t numBytes = bufferKB*220*1024;
+		// There is 64 kB of RAM to work with. Use 48 kB
+		uint32_t numSamples = bufferKB*1024/4;
+		uint32_t samples[numSamples];
+		for (uint16_t j=0; j< numSamples; j+=2) {
+			samples[j] = 0x98765432;
+			samples[j+1] = 0x1A2B3C4D;
+		}
+
+		for (int i = 0; i < 5; i++) {
 			sprintf(filename,"1MB_%d.bin",i);
 			fres = f_open(&fil, filename, FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
 			if (fres == FR_OK) {
-				uint32_t faux_sample1 = 0xF00D4FEE;
-				uint32_t faux_sample2 = 0xBEC0FFEE;
-				UINT bytesSaved;
-				for (uint32_t i = 0; i < 1024*1024/8; i++) {
-					fres = f_write(&fil, &faux_sample1, 4, &bytesSaved);
-					fres = f_write(&fil, &faux_sample2, 4, &bytesSaved);
+
+				// Test time to write ~10 MB
+				uint32_t numIter = numBytes / (bufferKB*1024);
+				for (uint16_t i = 0; i < numIter; i++) {
+					fres = f_write(&fil, samples, numSamples*4, &bytesSaved);
+					byteCount += numSamples*4;
 					if (fres != FR_OK) {
 						// Should really do something here, but can't use printf. Blink an LED?
 					}
 				}
+
+//				uint32_t faux_sample1 = 0xF00D4FEE;
+//				uint32_t faux_sample2 = 0xBEC0FFEE;
+//				UINT bytesSaved;
+//				for (uint32_t i = 0; i < 1024*1024/8; i++) {
+//					fres = f_write(&fil, &faux_sample1, 4, &bytesSaved);
+//					fres = f_write(&fil, &faux_sample2, 4, &bytesSaved);
+//					if (fres != FR_OK) {
+//						// Should really do something here, but can't use printf. Blink an LED?
+//					}
+//				}
 			}
 			// Close file
 			f_close(&fil);
 		}
 		diff_ms = HAL_GetTick() - start_ms;
+	}
 		break;
 	default :
 		break;
