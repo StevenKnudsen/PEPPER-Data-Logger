@@ -2,6 +2,7 @@ Debug
 Debug/*
 Release
 Release/*
+*crash*.json
 
 *.ld
 *.launch

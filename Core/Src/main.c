@@ -38,9 +38,8 @@
 #define DATA_FILE_RING_NUMBER    100 // files
 #define MAG_DATA_RATE            120000 // 32-bit words/s (24 valid and 8 zeros)
 #define MAG_DATA_BYTES_PER_SEC   (MAG_DATA_RATE * 4) // 480000 bytes
-#define MAG_DATA_BUFFER_LEN      (MAG_DATA_BYTES_PER_SEC / 10) // 1/10 s of data
+#define MAG_DATA_BUFFER_LEN      (MAG_DATA_BYTES_PER_SEC / 40) // 1/10 s of data
 #define MAG_DATA_SECS_PER_FILE   10
-#define MAG_DATA_BUFFERS_TO_SAVE (MAG_DATA_SECS_PER_FILE * MAG_DATA_BYTES_PER_SEC / MAG_DATA_BUFFER_LEN)
 
 /* USER CODE END PD */
 
@@ -103,9 +102,8 @@ int main(void)
 	MX_SPI1_Init();
 	MX_FATFS_Init();
 	MX_SPI3_Init();
-
 	/* USER CODE BEGIN 2 */
-//	HAL_Delay(500);
+	//	HAL_Delay(500);
 
 	// File stuff
 	FATFS FatFs;
@@ -178,6 +176,8 @@ int main(void)
 
 	uint8_t magSamples[MAG_DATA_BUFFER_LEN];
 
+	uint32_t numBuffers10s = MAG_DATA_BYTES_PER_SEC / MAG_DATA_BUFFER_LEN * 10;
+
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -192,37 +192,34 @@ int main(void)
 
 		sprintf(filename,"PEPPER_MAG_%03d.bin",currentFileNumber);
 
-		fres = f_open(&fil, filename, FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
-		if (fres != FR_OK) {
-			// Should really do something here...
-		}
-
-		// Write the current time in ms to the start of the file
-		uint32_t currentTime = HAL_GetTick();
-		fres = f_write(&fil, &currentTime, sizeof(uint32_t), &bytesSaved);
-		if (fres != FR_OK) {
-			// Should really do something here...
-		}
-
-		for (int bufferCount = 0; bufferCount < MAG_DATA_BUFFERS_TO_SAVE; bufferCount++) {
-			// receive a buffer of mag data
-			// Fill the current file with MAG data
-			HAL_SPI_Receive(&hspi3, magSamples, MAG_DATA_BUFFER_LEN, 100);
-			// write the buffer to file
-			fres = f_write(&fil, &magSamples, MAG_DATA_BUFFER_LEN, &bytesSaved);
-			if (fres != FR_OK) {
-				// Should really do something here...
+		fres = f_open(&fil, filename, FA_WRITE /*| FA_OPEN_ALWAYS*/ | FA_CREATE_ALWAYS);
+		if (fres == FR_OK) {
+			// Write the current time in ms to the start of the file
+			uint32_t currentTime = HAL_GetTick();
+			fres = f_write(&fil, &currentTime, sizeof(uint32_t), &bytesSaved);
+			if (fres == FR_OK) {
+				for (int bufferCount = 0; bufferCount < numBuffers10s; bufferCount++) {
+					// receive a buffer of mag data
+					// Fill the current file with MAG data
+					HAL_SPI_Receive(&hspi3, magSamples, MAG_DATA_BUFFER_LEN, 100);
+					// write the buffer to file
+					fres = f_write(&fil, magSamples, MAG_DATA_BUFFER_LEN, &bytesSaved);
+					if (fres != FR_OK) {
+						// Should really do something here...
+					}
+				}
 			}
 		}
 
 		// Close file
 		f_close(&fil);
 
+		diff_ms = HAL_GetTick() - start_ms;
+
 		// Increment the file counter
 		currentFileNumber += 1;
 		if (currentFileNumber > DATA_FILE_RING_NUMBER) currentFileNumber = 1;
 
-		diff_ms = HAL_GetTick() - start_ms;
 
 		/* USER CODE END WHILE */
 
@@ -247,26 +244,19 @@ void SystemClock_Config(void)
 		Error_Handler();
 	}
 
-	/** Configure LSE Drive Capability
-	 */
-	HAL_PWR_EnableBkUpAccess();
-	__HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
-
 	/** Initializes the RCC Oscillators according to the specified parameters
 	 * in the RCC_OscInitTypeDef structure.
 	 */
-	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSE|RCC_OSCILLATORTYPE_MSI;
-	RCC_OscInitStruct.LSEState = RCC_LSE_ON;
-	RCC_OscInitStruct.MSIState = RCC_MSI_ON;
-	RCC_OscInitStruct.MSICalibrationValue = 0;
-	RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
+	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+	RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+	RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
 	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
+	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
 	RCC_OscInitStruct.PLL.PLLM = 1;
 	RCC_OscInitStruct.PLL.PLLN = 18;
 	RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
 	RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
-	RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
+	RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV4;
 	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
 	{
 		Error_Handler();
@@ -281,14 +271,10 @@ void SystemClock_Config(void)
 	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
 	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
 	{
 		Error_Handler();
 	}
-
-	/** Enable MSI Auto calibration
-	 */
-	HAL_RCCEx_EnableMSIPLLMode();
 }
 
 /**
@@ -314,7 +300,7 @@ static void MX_SPI1_Init(void)
 	hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
 	hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
 	hspi1.Init.NSS = SPI_NSS_SOFT;
-	hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+	hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
 	hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
 	hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
 	hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
