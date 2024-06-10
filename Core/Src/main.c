@@ -200,7 +200,6 @@ int main(void)
 			if (fres == FR_OK) {
 				for (int bufferCount = 0; bufferCount < numBuffers10s; bufferCount++) {
 					// receive a buffer of mag data
-					// Fill the current file with MAG data
 					HAL_SPI_Receive(&hspi3, magSamples, MAG_DATA_BUFFER_LEN, 100);
 					// write the buffer to file
 					fres = f_write(&fil, magSamples, MAG_DATA_BUFFER_LEN, &bytesSaved);
